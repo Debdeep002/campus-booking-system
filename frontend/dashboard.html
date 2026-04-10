@@ -111,7 +111,7 @@
 <script>
     // 1. SECURITY DEADBOLT: Check for login BEFORE page loads
     if (!localStorage.getItem("userId")) {
-        window.location.href = "login.html";
+        window.location.href = "index.html";
     }
 
     const API_BASE = "https://campus-booking-backend-ubdy.onrender.com/api";
@@ -283,7 +283,7 @@
 
         if (!loggedInUserId) {
             alert("Session expired. Please log in again.");
-            window.location.href = "login.html";
+            window.location.href = "index.html";
             return;
         }
 
@@ -326,7 +326,7 @@
         localStorage.removeItem("userName");
         localStorage.removeItem("userRole");
         alert("You have been logged out.");
-        window.location.href = "login.html";
+        window.location.href = "index.html";
     }
 
     // THE NEW MASTER NOTIFICATION SYSTEM

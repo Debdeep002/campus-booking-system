@@ -75,7 +75,7 @@
         // 1. Security & Setup
         window.onload = async function() {
             if (localStorage.getItem("userRole") !== "Admin") {
-                window.location.href = "login.html"; return;
+                window.location.href = "index.html"; return;
             }
             document.getElementById("admin-welcome").innerText = "Welcome, " + localStorage.getItem("userName");
 
@@ -216,7 +216,7 @@
 
         function logout() {
             localStorage.clear();
-            window.location.href = "login.html";
+            window.location.href = "index.html";
         }
     </script>
 </body>

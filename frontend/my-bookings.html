@@ -59,7 +59,7 @@
         // 1. Security & Setup
         window.onload = function() {
             if (!userId) {
-                window.location.href = "login.html";
+                window.location.href = "index.html";
                 return;
             }
             document.getElementById("welcome-text").innerText = "Hello, " + localStorage.getItem("userName");
@@ -152,7 +152,7 @@
 
         function logout() {
             localStorage.clear();
-            window.location.href = "login.html";
+            window.location.href = "index.html";
         }
     </script>
 </body>
