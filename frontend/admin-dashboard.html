@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Room Management</title>
+    
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+
+    <style>
+        body { font-family: 'Open Sans', sans-serif; background: #f9f9f9; margin: 0; }
+        header { background: #246180; color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .controls { padding: 20px; text-align: center; background: white; border-bottom: 1px solid gainsboro; }
+        select { padding: 10px; font-size: 16px; margin-right: 10px; }
+        button { padding: 10px 20px; background: #59989A; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        
+        .room-grid { display: flex; flex-wrap: wrap; padding: 20px; gap: 15px; justify-content: center; }
+        .room-card { 
+            background: white; padding: 20px; width: 150px; text-align: center; 
+            border: 1px solid gainsboro; border-radius: 8px; cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); transition: 0.2s;
+        }
+        .room-card:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); border-color: #246180; }
+        .room-card h3 { margin: 0 0 10px 0; color: #333; }
+        
+        /* Modal Table Styles */
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f1f1f1; }
+        .btn-sm { padding: 5px 10px; color: white; border: none; cursor: pointer; border-radius: 3px; font-size: 12px; margin-right: 5px; }
+        .btn-approve { background: #4CAF50; }
+        .btn-deny { background: #f44336; }
+        .btn-cancel { background: #ff9800; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h2>ADMIN PORTAL: Master Room Manager</h2>
+        <div>
+            <span id="admin-welcome" style="margin-right: 20px; font-weight: bold;"></span>
+            <button onclick="logout()" style="background: transparent; border: 1px solid white;">Logout</button>
+        </div>
+    </header>
+
+    <div class="controls">
+        <select id="building-select"><option value="">Select Building...</option></select>
+        <button onclick="loadRooms()">View Rooms</button>
+    </div>
+
+    <div class="room-grid" id="room-container">
+        </div>
+
+    <div id="requests-dialog" title="Room Requests" style="display:none;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Requested By</th> <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="requests-table-body">
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        const API_BASE = "https://campus-booking-backend-ubdy.onrender.com/api";
+        let currentRoomId = null;
+
+        // 1. Security & Setup
+        window.onload = async function() {
+            if (localStorage.getItem("userRole") !== "Admin") {
+                window.location.href = "login.html"; return;
+            }
+            document.getElementById("admin-welcome").innerText = "Welcome, " + localStorage.getItem("userName");
+
+            // Load Buildings
+            try {
+                const res = await fetch(`${API_BASE}/college/buildings`);
+                const buildings = await res.json();
+                const select = document.getElementById("building-select");
+                buildings.forEach(b => {
+                    const name = b.buildingName || b.building_name;
+                    select.innerHTML += `<option value="${b.buildingId || b.id}">${name}</option>`;
+                });
+            } catch (err) { console.error("Failed to load buildings", err); }
+        };
+
+        // 2. Load Room Cards
+        async function loadRooms() {
+            const bId = document.getElementById("building-select").value;
+            if (!bId) { alert("Select a building!"); return; }
+
+            try {
+                const res = await fetch(`${API_BASE}/college/buildings/${bId}/rooms`);
+                const rooms = await res.json();
+                
+                const container = document.getElementById("room-container");
+                container.innerHTML = "";
+
+                rooms.forEach(room => {
+                    const rName = room.roomNumber || "Room";
+                    const rId = room.roomId || room.id;
+                    container.innerHTML += `
+                        <div class="room-card" onclick="openRoomRequests(${rId}, '${rName}')">
+                            <h3>${rName}</h3>
+                            <span style="font-size:12px; color:gray;">Click to view requests</span>
+                        </div>
+                    `;
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        // 3. Open Modal and Fetch All Requests for that Room
+        async function openRoomRequests(roomId, roomName) {
+            currentRoomId = roomId; // Save for refreshing later
+            
+            try {
+                const res = await fetch(`${API_BASE}/bookings/room/${roomId}/all`);
+                let bookings = await res.json();
+                
+                // Sort by date so it's easy to read
+                bookings.sort((a, b) => new Date(a.bookingDate) - new Date(b.bookingDate));
+
+                const tbody = document.getElementById("requests-table-body");
+                tbody.innerHTML = "";
+
+                if (bookings.length === 0) {
+                    // Spanning 5 columns now!
+                    tbody.innerHTML = "<tr><td colspan='5' style='text-align:center;'>No requests for this room.</td></tr>";
+                } else {
+                    bookings.forEach(b => {
+                        const bId = b.bookingId || b.id;
+
+                        // 1. Determine Clean Display Status & Colors
+                        let displayStatus = b.status;
+                        let statusColor = "gray";
+
+                        if (b.status === "Approved" || b.status === "Approved_Seen") {
+                            statusColor = "green";
+                            displayStatus = "Approved";
+                        } else if (b.status === "Pending") {
+                            statusColor = "orange";
+                        } else if (b.status === "Denied" || b.status === "Denied_Seen" || b.status === "Cancelled" || b.status === "Cancelled_Seen") {
+                            statusColor = "red";
+                            if (b.status === "Denied_Seen") displayStatus = "Denied";
+                            if (b.status === "Cancelled_Seen") displayStatus = "Cancelled";
+                        }
+
+                        // 2. Action Buttons Logic (Now handles Approved_Seen!)
+                        let actionButtons = "";
+                        if (b.status === "Pending") {
+                            actionButtons = `
+                                <button class="btn-sm btn-approve" onclick="updateStatus(${bId}, 'Approved')">Approve</button>
+                                <button class="btn-sm btn-deny" onclick="updateStatus(${bId}, 'Denied')">Deny</button>
+                            `;
+                        } else if (b.status === "Approved" || b.status === "Approved_Seen") {
+                            actionButtons = `<button class="btn-sm btn-cancel" onclick="updateStatus(${bId}, 'Cancelled')">Cancel Booking</button>`;
+                        } else {
+                            actionButtons = `<span style="font-size:12px; color:gray;">Closed</span>`;
+                        }
+
+                        // 3. Safely extract the user's name AND their Role!
+                        const userName = (b.user && b.user.fullName) ? b.user.fullName : "Unknown User";
+                        const userRole = (b.user && b.user.role) ? b.user.role : "User";
+
+                        // Create a visual badge so the Admin knows who they are dealing with
+                        let roleBadge = "";
+                        if (userRole === "Faculty") {
+                            roleBadge = `<span style="background: #e0f7fa; color: #00838f; padding: 2px 6px; border-radius: 10px; font-size: 11px; margin-left: 5px;">Faculty</span>`;
+                        } else if (userRole === "Student") {
+                            roleBadge = `<span style="background: #f1f8e9; color: #33691e; padding: 2px 6px; border-radius: 10px; font-size: 11px; margin-left: 5px;">Student</span>`;
+                        }
+
+                        // 4. Print the row (Using displayStatus instead of b.status)
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${b.bookingDate}</td>
+                                <td>${b.startTime}</td>
+                                <td style="font-weight: bold; color: #246180;">${userName} ${roleBadge}</td>
+                                <td style="color: ${statusColor}; font-weight: bold;">${displayStatus}</td>
+                                <td>${actionButtons}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                // Open the jQuery UI Dialog
+                $("#requests-dialog").dialog({
+                    title: `Requests: Room ${roomName}`,
+                    width: 550, 
+                    modal: true
+                });
+
+            } catch (err) { console.error(err); }
+        }
+
+        // 4. Update Status API Call
+        async function updateStatus(bookingId, newStatus) {
+            if (!confirm(`Mark this booking as ${newStatus}?`)) return;
+
+            try {
+                const res = await fetch(`${API_BASE}/bookings/${bookingId}/status?status=${newStatus}`, { method: 'PUT' });
+                if (res.ok) {
+                    alert(`Status updated to ${newStatus}`);
+                    // Refresh the modal data without closing it
+                    openRoomRequests(currentRoomId, document.querySelector(".ui-dialog-title").innerText.split("Room ")[1]);
+                }
+            } catch (err) { console.error(err); }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = "login.html";
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Bookings</title>
+    <style>
+        body { font-family: 'Open Sans', sans-serif; background: #f9f9f9; margin: 0; }
+        header { background: #246180; color: white; padding: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .container { padding: 30px; max-width: 1000px; margin: auto; }
+        
+        .header-buttons button {
+            background: transparent; border: 1px solid white; color: white; 
+            padding: 8px 15px; cursor: pointer; border-radius: 4px; margin-left: 10px;
+        }
+        .header-buttons button:hover { background: rgba(255,255,255,0.1); }
+
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #59989A; color: white; }
+        
+        .btn-cancel { background: #ff9800; color: white; border: none; padding: 8px 12px; cursor: pointer; border-radius: 3px; font-size: 13px; }
+        .btn-cancel:hover { background: #e68a00; }
+        .empty-state { text-align: center; padding: 40px; color: gray; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h2>My Room Bookings</h2>
+        <div class="header-buttons">
+            <span id="welcome-text" style="margin-right: 15px; font-weight: bold;"></span>
+            <button onclick="window.location.href='dashboard.html'">Back to Grid</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Room</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Attendees</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="bookings-table-body">
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        const API_BASE = "https://campus-booking-backend-ubdy.onrender.com/api";
+        const userId = localStorage.getItem("userId");
+
+        // 1. Security & Setup
+        window.onload = function() {
+            if (!userId) {
+                window.location.href = "login.html";
+                return;
+            }
+            document.getElementById("welcome-text").innerText = "Hello, " + localStorage.getItem("userName");
+            loadMyBookings();
+        };
+
+        // 2. Fetch and Display User's Bookings
+        async function loadMyBookings() {
+            try {
+                const response = await fetch(`${API_BASE}/bookings/user/${userId}`);
+                let bookings = await response.json();
+                
+                // Sort by date (newest first)
+                bookings.sort((a, b) => new Date(b.bookingDate) - new Date(a.bookingDate));
+
+                const tbody = document.getElementById("bookings-table-body");
+                tbody.innerHTML = "";
+
+                if (bookings.length === 0) {
+                    tbody.innerHTML = "<tr><td colspan='6' class='empty-state'>You haven't requested any rooms yet.</td></tr>";
+                    return;
+                }
+
+                bookings.forEach(b => {
+                    const roomName = (b.room && b.room.roomNumber) ? b.room.roomNumber : "Unknown Room";
+                    const bId = b.bookingId || b.id;
+
+                    // 1. Determine Status Colors & Text (Handling all _Seen tricks!)
+                    let statusColor = "gray";
+                    let displayStatus = b.status; 
+
+                    if (b.status === "Approved" || b.status === "Approved_Seen") {
+                        statusColor = "green";
+                        if (b.status === "Approved_Seen") displayStatus = "Approved"; 
+                    }
+                    if (b.status === "Pending") {
+                        statusColor = "orange";
+                    }
+                    if (b.status === "Denied" || b.status === "Denied_Seen" || b.status === "Cancelled" || b.status === "Cancelled_Seen") {
+                        statusColor = "red";
+                        if (b.status === "Denied_Seen") displayStatus = "Denied"; 
+                        if (b.status === "Cancelled_Seen") displayStatus = "Cancelled"; 
+                    }
+
+                    // 2. Determine Action Button
+                    let actionHtml = "";
+                    if (b.status === "Pending" || b.status === "Approved" || b.status === "Approved_Seen") {
+                        actionHtml = `<button class="btn-cancel" onclick="cancelBooking(${bId})">Cancel Request</button>`;
+                    } else {
+                        actionHtml = `<span style="color:gray; font-size: 13px;">Closed</span>`;
+                    }
+
+                    // 3. Print the Row
+                    tbody.innerHTML += `
+                        <tr>
+                            <td style="font-weight: bold;">${roomName}</td>
+                            <td>${b.bookingDate}</td>
+                            <td>${b.startTime}</td>
+                            <td>${b.attendeeCount} people</td>
+                            <td style="color: ${statusColor}; font-weight: bold;">${displayStatus}</td>
+                            <td>${actionHtml}</td>
+                        </tr>
+                    `;
+                });
+            } catch (err) {
+                console.error("Error loading bookings:", err);
+                document.getElementById("bookings-table-body").innerHTML = "<tr><td colspan='6' style='color:red;'>Failed to load data.</td></tr>";
+            }
+        }
+
+        // 3. Cancel a Booking (Reuses the existing Admin endpoint!)
+        async function cancelBooking(bookingId) {
+            if (!confirm("Are you sure you want to cancel this booking?")) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/bookings/${bookingId}/status?status=Cancelled`, {
+                    method: 'PUT'
+                });
+
+                if (response.ok) {
+                    alert("Booking cancelled successfully.");
+                    loadMyBookings(); // Refresh the table
+                } else {
+                    alert("Failed to cancel booking.");
+                }
+            } catch (err) {
+                console.error("Error:", err);
+            }
+        }
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = "login.html";
+        }
+    </script>
+</body>
+</html>
