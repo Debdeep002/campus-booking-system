@@ -186,7 +186,18 @@
     }
 
     function toggleFloor() {
-        currentFloorView = currentFloorView === 0 ? 1 : 0; 
+        // 1. Find all unique floor numbers in the database and sort them (0, 1, 2...)
+        const availableFloors = [...new Set(allFetchedRooms.map(room => 
+            room.floor_number !== undefined ? room.floor_number : room.floorNumber
+        ))].sort((a, b) => a - b);
+
+        // 2. Find where we currently are in that list
+        let currentIndex = availableFloors.indexOf(currentFloorView);
+
+        // 3. Move to the next floor, and loop back to the start if we hit the top!
+        currentFloorView = availableFloors[(currentIndex + 1) % availableFloors.length]; 
+        
+        // 4. Re-draw the grid
         const selectedDate = document.getElementById("booking-date").value; 
         renderGridForCurrentFloor(selectedDate); 
     }
@@ -210,7 +221,23 @@
             return floor === currentFloorView;
         });
 
-        const buttonTitle = currentFloorView === 0 ? "Next Level First Floor" : "Previous Level Ground Floor";
+        // Calculate what the NEXT floor is going to be so we can label the button correctly
+        const availableFloors = [...new Set(allFetchedRooms.map(room => 
+            room.floor_number !== undefined ? room.floor_number : room.floorNumber
+        ))].sort((a, b) => a - b);
+        
+        let currentIndex = availableFloors.indexOf(currentFloorView);
+        let nextFloorView = availableFloors[(currentIndex + 1) % availableFloors.length];
+        
+        // Create a nice text label for the upcoming floor
+        let floorLabel = "";
+        if (nextFloorView === 0) floorLabel = "Ground Floor";
+        else if (nextFloorView === 1) floorLabel = "First Floor";
+        else if (nextFloorView === 2) floorLabel = "Second Floor";
+        else if (nextFloorView === 3) floorLabel = "Third Floor"; // Ready for your next update!
+        else floorLabel = `${nextFloorView}th Floor`;
+
+        const buttonTitle = `Next Level (${floorLabel})`;
 
         let html = `
             <tr class="rbc">
