@@ -163,6 +163,9 @@
 
     // 3. Generate the Grid
     async function loadGrid() {
+        const buildingId = document.getElementById("buildingId").value; 
+        const date = document.getElementById("date").value;
+        
         if (!buildingId) { alert("Select a building first!"); return; }
         if (!date) { alert("Please select a date first!"); return; }
 
@@ -203,6 +206,8 @@
         const table = document.getElementById("main-table");
         const userRole = localStorage.getItem("role"); 
         const userId = localStorage.getItem("userId");
+        
+        const date = document.getElementById("date").value;
 
         // 1. First Filter: Remove rooms based on user role (e.g., Students can't see Staff Rooms/Labs)
         const roleFilteredRooms = allFetchedRooms.filter(room => {
