@@ -92,6 +92,11 @@
     </div>
 </div>
 
+<div id="floorToggleBtn" style="cursor: pointer;" onclick="toggleFloor()">
+    <h3 id="floorBtnTitle">Next Level</h3>
+    <p><span id="floorRoomCount">64</span> Rooms</p>
+</div>
+
 <div id="dialog" title="Book a Meeting Room">
     <div class="form">
         <input type="hidden" id="modal-room-id" />
@@ -115,6 +120,9 @@
     }
 
     const API_BASE = "https://campus-booking-backend-ubdy.onrender.com/api";
+
+    let currentFloorView = 0; // 0 = Ground Floor, 1 = First Floor
+    let allFetchedRooms = []; // We will store the database results here
 
     // 2. Setup Page on Load
     window.onload = async function() {
@@ -160,8 +168,6 @@
 
     // 3. Generate the Grid
     async function loadGrid() {
-        const buildingId = document.getElementById("building-select").value;
-        const date = document.getElementById("booking-date").value;
 
         if (!buildingId) { alert("Select a building first!"); return; }
         if (!date) { alert("Please select a date first!"); return; }
@@ -169,6 +175,9 @@
         try {
             const response = await fetch(`${API_BASE}/college/buildings/${buildingId}/rooms`);
             const rooms = await response.json();
+
+            allFetchedRooms = rooms;          // 1. Save the fetched data to the global variable
+            renderGridForCurrentFloor();      // 2. Trigger the function to draw the grid based on the current floor
             
             const userRole = localStorage.getItem("role"); // Or however you saved it during login
 
@@ -243,6 +252,40 @@
             console.error("Grid Load Error:", err);
             alert("Something went wrong. Check the console for details.");
         }
+    }
+
+    function toggleFloor() {
+        // If on Ground (0), go to First (1). If on First (1), go back to Ground (0).
+        currentFloorView = currentFloorView === 0 ? 1 : 0; 
+        
+        // Update the button text so the user knows where they are going next
+        const btnTitle = document.getElementById('floorBtnTitle');
+        if (currentFloorView === 0) {
+            btnTitle.innerText = "Next Level (1st Floor)";
+        } else {
+            btnTitle.innerText = "Previous Level (Ground Floor)";
+        }
+        
+        // Redraw the grid with the new floor selected
+        renderGridForCurrentFloor(); 
+    }
+
+    function renderGridForCurrentFloor() {
+        // 1. Filter the rooms array to ONLY include rooms matching the currentFloorView
+        const filteredRooms = allFetchedRooms.filter(room => room.floor_number === currentFloorView);
+        
+        // 2. Update the counter in your UI box
+        document.getElementById('floorRoomCount').innerText = filteredRooms.length;
+        
+        // 3. Clear your existing grid container (replace 'gridContainer' with your actual div ID)
+        const container = document.getElementById('gridContainer'); 
+        container.innerHTML = ''; 
+
+        // 4. Loop through ONLY the filtered rooms and build your HTML
+        filteredRooms.forEach(room => {
+            const buildingId = document.getElementById("building-select").value;
+            const date = document.getElementById("booking-date").value;
+        });
     }
 
     function openModal(roomId, roomNumber, timeSlot) {
