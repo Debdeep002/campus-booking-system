@@ -152,8 +152,8 @@
             select.innerHTML = '<option value="">Select Building...</option>'; 
             
             buildings.forEach(b => {
-                const name = b.buildingName || b.building_name || "Unknown Building";
-                const id = b.buildingId || b.id;
+                const name = b.buildingName || b.building_name || b.name || "Unknown Building";
+                const id = b.building_id || b.buildingId || b.id;
                 select.innerHTML += `<option value="${id}">${name}</option>`;
             });
         } catch (err) {
@@ -163,22 +163,21 @@
 
     // 3. Generate the Grid
     async function loadGrid() {
-        const buildingId = document.getElementById("buildingId").value; 
-        const date = document.getElementById("date").value;
-        
-        if (!buildingId) { alert("Select a building first!"); return; }
-        if (!date) { alert("Please select a date first!"); return; }
+        // 1. Grab the values using the exact names from your system
+        // (Check your HTML file: if your dropdown id is "buildingId", change "building_id" back to "buildingId")
+        const selectedBuilding = document.getElementById("building-select").value; 
+        const selectedDate = document.getElementById("booking-date").value; 
+
+        if (!selectedBuilding) { alert("Select a building first!"); return; }
+        if (!selectedDate) { alert("Please select a date first!"); return; }
 
         try {
-            // 1. Fetch the master list of rooms from the backend
-            const response = await fetch(`${API_BASE}/college/buildings/${buildingId}/rooms`);
+            // Fetch using the building variable
+            const response = await fetch(`${API_BASE}/college/buildings/${selectedBuilding}/rooms`);
             const rooms = await response.json();
 
-            // 2. Save it to our global variable so the toggle button can use it
             allFetchedRooms = rooms;          
-
-            // 3. Trigger the drawing function
-            renderGridForCurrentFloor();      
+            renderGridForCurrentFloor(selectedDate); // Pass the date down so the next function can use it!
 
         } catch (err) {
             console.error("Grid Load Error:", err);
@@ -187,42 +186,32 @@
     }
 
     function toggleFloor() {
-        // If on Ground (0), go to First (1). If on First (1), go back to Ground (0).
         currentFloorView = currentFloorView === 0 ? 1 : 0; 
-        
-        // Update the button text so the user knows where they are going next
-        const btnTitle = document.getElementById('floorBtnTitle');
-        if (currentFloorView === 0) {
-            btnTitle.innerText = "Next Level (1st Floor)";
-        } else {
-            btnTitle.innerText = "Previous Level (Ground Floor)";
-        }
-        
-        // Redraw the grid with the new floor selected
-        renderGridForCurrentFloor(); 
+        const selectedDate = document.getElementById("booking-date").value; 
+        renderGridForCurrentFloor(selectedDate); 
     }
 
-    async function renderGridForCurrentFloor() {
+    async function renderGridForCurrentFloor(selectedDate) {
         const table = document.getElementById("main-table");
         const userRole = localStorage.getItem("role"); 
-        const userId = localStorage.getItem("userId");
-        
-        const date = document.getElementById("date").value;
+        const userId = localStorage.getItem("user_id") || localStorage.getItem("userId");
 
-        // 1. First Filter: Remove rooms based on user role (e.g., Students can't see Staff Rooms/Labs)
+        // 1. Filter using your exact database names (room_type, floor_number)
+        // *Note: Spring Boot often converts 'room_type' to 'roomType' in JSON, so we check both just in case!
         const roleFilteredRooms = allFetchedRooms.filter(room => {
-            if (room.roomType === "Staff Room") return false; 
-            if (room.roomType === "Lab" && userRole === "Student") return false; 
+            const type = room.room_type || room.roomType; 
+            if (type === "Staff Room") return false; 
+            if (type === "Lab" && userRole === "Student") return false; 
             return true; 
         });
 
-        // 2. Second Filter: Only keep rooms for the floor we are currently looking at
-        const finalVisibleRooms = roleFilteredRooms.filter(room => room.floor_number === currentFloorView);
+        const finalVisibleRooms = roleFilteredRooms.filter(room => {
+            const floor = room.floor_number !== undefined ? room.floor_number : room.floorNumber;
+            return floor === currentFloorView;
+        });
 
-        // 3. Set up the toggle button text
         const buttonTitle = currentFloorView === 0 ? "Next Level (1st Floor)" : "Previous Level (Ground Floor)";
 
-        // 4. Build the HTML Header
         let html = `
             <tr class="rbc">
                 <th class="location" style="cursor: pointer; transition: 0.2s;" onclick="toggleFloor()" title="Click to switch floors">
@@ -234,29 +223,30 @@
                 <th>03:00 PM</th><th>04:00 PM</th><th>05:00 PM</th> <th>06:00 PM</th>
             </tr>`;
 
-        // 5. Loop through ONLY the filtered rooms to draw the rows
         for (const room of finalVisibleRooms) {
-            const rName = room.roomNumber || "Room";
+            // Match your database naming
+            const rName = room.room_number || room.roomNumber || "Room";
             const rCap = room.capacity || "0";
-            const rId = room.roomId || room.id;
+            const rId = room.room_id || room.roomId || room.id;
 
             html += `<tr>
                 <th class="align-left">${rName}<br><span style="font-size:10px; font-weight:normal;">Cap: ${rCap}</span></th>`;
             
             try {
-                // Check availability for this specific room
-                const bookingRes = await fetch(`${API_BASE}/bookings/availability?roomId=${rId}&date=${date}&userId=${userId}`);
+                // Check availability using the EXACT variables
+                const bookingRes = await fetch(`${API_BASE}/bookings/availability?roomId=${rId}&date=${selectedDate}&userId=${userId}`);
                 
                 if (!bookingRes.ok) throw new Error("Backend failed to return availability.");
                 const bookedSlots = await bookingRes.json();
                 
                 const slotStatus = {};
                 bookedSlots.forEach(b => {
-                    let hr = typeof b.startTime === 'string' ? parseInt(b.startTime.split(':')[0]) : b.startTime[0];
+                    // Check for start_time (DB schema) or startTime (Java object)
+                    const start = b.start_time || b.startTime;
+                    let hr = typeof start === 'string' ? parseInt(start.split(':')[0]) : start[0];
                     slotStatus[hr] = b.status;
                 });
 
-                // Draw the time slots
                 for (let i = 9; i <= 18; i++) {
                     const timeStr = `${i.toString().padStart(2, '0')}:00`;
                     
@@ -270,14 +260,12 @@
                 }
             } catch (error) {
                 console.error(`Failed to load bookings for Room ${rId}`, error);
-                // If the fetch fails for one room, fill it with grey squares so the UI doesn't break
                 for (let i = 9; i <= 18; i++) html += `<td style="background-color: #eee;"></td>`;
             }
 
             html += `</tr>`;
         }
 
-        // Finally, push the completed HTML to the screen
         table.innerHTML = html;
     }
 
