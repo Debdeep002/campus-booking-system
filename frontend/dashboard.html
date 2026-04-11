@@ -92,11 +92,6 @@
     </div>
 </div>
 
-<div id="floorToggleBtn" style="cursor: pointer;" onclick="toggleFloor()">
-    <h3 id="floorBtnTitle">Next Level</h3>
-    <p><span id="floorRoomCount">64</span> Rooms</p>
-</div>
-
 <div id="dialog" title="Book a Meeting Room">
     <div class="form">
         <input type="hidden" id="modal-room-id" />
@@ -168,86 +163,20 @@
 
     // 3. Generate the Grid
     async function loadGrid() {
-
         if (!buildingId) { alert("Select a building first!"); return; }
         if (!date) { alert("Please select a date first!"); return; }
 
         try {
+            // 1. Fetch the master list of rooms from the backend
             const response = await fetch(`${API_BASE}/college/buildings/${buildingId}/rooms`);
             const rooms = await response.json();
 
-            allFetchedRooms = rooms;          // 1. Save the fetched data to the global variable
-            renderGridForCurrentFloor();      // 2. Trigger the function to draw the grid based on the current floor
-            
-            const userRole = localStorage.getItem("role"); // Or however you saved it during login
+            // 2. Save it to our global variable so the toggle button can use it
+            allFetchedRooms = rooms;          
 
-            // 1. Create a NEW variable called 'visibleRooms'
-            const visibleRooms = rooms.filter(room => {
-                if (room.roomType === "Staff Room") return false; 
-                if (room.roomType === "Lab" && userRole === "Student") return false; 
-                return true; 
-            });
+            // 3. Trigger the drawing function
+            renderGridForCurrentFloor();      
 
-            // 2. IMPORTANT: Update your grid loop to use 'visibleRooms' instead of 'rooms'
-            visibleRooms.forEach(room => {
-            // ... your grid drawing code ...
-            });
-            
-            const table = document.getElementById("main-table");
-            
-            let html = `
-                <tr class="rbc">
-                    <th class="location">Next Level <p>${rooms.length} Rooms</p></th>
-                    <th>09:00 AM</th><th>10:00 AM</th><th>11:00 AM</th>
-                    <th>12:00 PM</th><th>01:00 PM</th><th>02:00 PM</th>
-                    <th>03:00 PM</th><th>04:00 PM</th><th>05:00 PM</th> <th>06:00 PM</th>
-                </tr>`;
-
-            for (const room of rooms) {
-                const rName = room.roomNumber || "Room";
-                const rCap = room.capacity || "0";
-                const rId = room.roomId || room.id;
-
-                html += `<tr>
-                    <th class="align-left">${rName}<br><span style="font-size:10px; font-weight:normal;">Cap: ${rCap}</span></th>`;
-                
-                // 1. We added userId to the URL so Java knows who is asking!
-            const userId = localStorage.getItem("userId");
-            const bookingRes = await fetch(`${API_BASE}/bookings/availability?roomId=${rId}&date=${date}&userId=${userId}`);
-            
-            if (!bookingRes.ok) {
-                console.error(`Error fetching bookings for Room ${rId}`);
-                throw new Error("Backend failed to return availability.");
-            }
-
-            const bookedSlots = await bookingRes.json();
-            
-            // 2. Create a dictionary of Hour -> Status (e.g., 9: "Approved", 10: "Pending")
-            const slotStatus = {};
-            bookedSlots.forEach(b => {
-                let hr = typeof b.startTime === 'string' ? parseInt(b.startTime.split(':')[0]) : b.startTime[0];
-                slotStatus[hr] = b.status;
-            });
-
-            // 3. The New Drawing Loop
-            for (let i = 9; i <= 18; i++) {
-                const timeStr = `${i.toString().padStart(2, '0')}:00`;
-                
-                if (slotStatus[i] === "Approved"|| slotStatus[i] === "Approved_Seen") {
-                    // Paint it RED for Taken
-                    html += `<td style="background-color: #ff4d4d; cursor: not-allowed; text-align: center; color: white; font-size: 12px; font-weight: bold;">Taken</td>`;
-                } else if (slotStatus[i] === "Pending") {
-                    // Paint it ORANGE for Pending!
-                    html += `<td style="background-color: orange; cursor: not-allowed; text-align: center; color: white; font-size: 12px; font-weight: bold;">Pending</td>`;
-                } else {
-                    // Leave it white and clickable
-                    html += `<td onclick="openModal(${rId}, '${rName}', '${timeStr}')" style="cursor: pointer; transition: background 0.2s;"></td>`;
-                }
-            }
-                html += `</tr>`;
-            }
-
-            table.innerHTML = html;
         } catch (err) {
             console.error("Grid Load Error:", err);
             alert("Something went wrong. Check the console for details.");
@@ -270,22 +199,81 @@
         renderGridForCurrentFloor(); 
     }
 
-    function renderGridForCurrentFloor() {
-        // 1. Filter the rooms array to ONLY include rooms matching the currentFloorView
-        const filteredRooms = allFetchedRooms.filter(room => room.floor_number === currentFloorView);
-        
-        // 2. Update the counter in your UI box
-        document.getElementById('floorRoomCount').innerText = filteredRooms.length;
-        
-        // 3. Clear your existing grid container (replace 'gridContainer' with your actual div ID)
-        const container = document.getElementById('gridContainer'); 
-        container.innerHTML = ''; 
+    async function renderGridForCurrentFloor() {
+        const table = document.getElementById("main-table");
+        const userRole = localStorage.getItem("role"); 
+        const userId = localStorage.getItem("userId");
 
-        // 4. Loop through ONLY the filtered rooms and build your HTML
-        filteredRooms.forEach(room => {
-            const buildingId = document.getElementById("building-select").value;
-            const date = document.getElementById("booking-date").value;
+        // 1. First Filter: Remove rooms based on user role (e.g., Students can't see Staff Rooms/Labs)
+        const roleFilteredRooms = allFetchedRooms.filter(room => {
+            if (room.roomType === "Staff Room") return false; 
+            if (room.roomType === "Lab" && userRole === "Student") return false; 
+            return true; 
         });
+
+        // 2. Second Filter: Only keep rooms for the floor we are currently looking at
+        const finalVisibleRooms = roleFilteredRooms.filter(room => room.floor_number === currentFloorView);
+
+        // 3. Set up the toggle button text
+        const buttonTitle = currentFloorView === 0 ? "Next Level (1st Floor)" : "Previous Level (Ground Floor)";
+
+        // 4. Build the HTML Header
+        let html = `
+            <tr class="rbc">
+                <th class="location" style="cursor: pointer; transition: 0.2s;" onclick="toggleFloor()" title="Click to switch floors">
+                    ${buttonTitle} 
+                    <p style="margin:0; font-size:12px; font-weight:normal;">${finalVisibleRooms.length} Rooms</p>
+                </th>
+                <th>09:00 AM</th><th>10:00 AM</th><th>11:00 AM</th>
+                <th>12:00 PM</th><th>01:00 PM</th><th>02:00 PM</th>
+                <th>03:00 PM</th><th>04:00 PM</th><th>05:00 PM</th> <th>06:00 PM</th>
+            </tr>`;
+
+        // 5. Loop through ONLY the filtered rooms to draw the rows
+        for (const room of finalVisibleRooms) {
+            const rName = room.roomNumber || "Room";
+            const rCap = room.capacity || "0";
+            const rId = room.roomId || room.id;
+
+            html += `<tr>
+                <th class="align-left">${rName}<br><span style="font-size:10px; font-weight:normal;">Cap: ${rCap}</span></th>`;
+            
+            try {
+                // Check availability for this specific room
+                const bookingRes = await fetch(`${API_BASE}/bookings/availability?roomId=${rId}&date=${date}&userId=${userId}`);
+                
+                if (!bookingRes.ok) throw new Error("Backend failed to return availability.");
+                const bookedSlots = await bookingRes.json();
+                
+                const slotStatus = {};
+                bookedSlots.forEach(b => {
+                    let hr = typeof b.startTime === 'string' ? parseInt(b.startTime.split(':')[0]) : b.startTime[0];
+                    slotStatus[hr] = b.status;
+                });
+
+                // Draw the time slots
+                for (let i = 9; i <= 18; i++) {
+                    const timeStr = `${i.toString().padStart(2, '0')}:00`;
+                    
+                    if (slotStatus[i] === "Approved" || slotStatus[i] === "Approved_Seen") {
+                        html += `<td style="background-color: #ff4d4d; cursor: not-allowed; text-align: center; color: white; font-size: 12px; font-weight: bold;">Taken</td>`;
+                    } else if (slotStatus[i] === "Pending") {
+                        html += `<td style="background-color: orange; cursor: not-allowed; text-align: center; color: white; font-size: 12px; font-weight: bold;">Pending</td>`;
+                    } else {
+                        html += `<td onclick="openModal(${rId}, '${rName}', '${timeStr}')" style="cursor: pointer; transition: background 0.2s;"></td>`;
+                    }
+                }
+            } catch (error) {
+                console.error(`Failed to load bookings for Room ${rId}`, error);
+                // If the fetch fails for one room, fill it with grey squares so the UI doesn't break
+                for (let i = 9; i <= 18; i++) html += `<td style="background-color: #eee;"></td>`;
+            }
+
+            html += `</tr>`;
+        }
+
+        // Finally, push the completed HTML to the screen
+        table.innerHTML = html;
     }
 
     function openModal(roomId, roomNumber, timeSlot) {
