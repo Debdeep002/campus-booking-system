@@ -5,15 +5,19 @@ A full-stack, 3-tier web application built for seamless campus room management a
 🚀 **Live Demo:** https://campus-booking-system-taupe.vercel.app
 
 ### 🔑 Test Credentials
-To evaluate the Role-Based Access Control (RBAC), please use the following test accounts:
+To evaluate the Role-Based Access Control (RBAC), we have the following user role test accounts:
 
 **Admin Access (Can view/book all rooms including Labs & Staff Rooms):**
 * **Role:** Admin
-* *(Add the username/password you created in your database for an admin)*
+* ********************
+
+**Faculty Access (Can view/book all rooms including Labs but not Staff Rooms):**
+* **Role:** Faculty
+* ********************
 
 **Student Access (Restricted from Staff Rooms and specific Labs):**
 * **Role:** Student
-* *(Add the username/password you created for a student)*
+* ********************
 
 ### 🏗️ Architecture
 * **Frontend:** Vanilla HTML/CSS/JS (Hosted on Vercel)
